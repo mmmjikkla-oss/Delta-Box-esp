@@ -1,6 +1,14 @@
--- Health Bar ESP Only
+-- Health Bar ESP Only (Clean & Toggleable)
 local player = game:GetService("Players").LocalPlayer
 local camera = game:GetService("Workspace").CurrentCamera
+
+-- 기존에 남아있던 잔해 청소
+if _G.HealthBarEspCache then
+    for _, item in pairs(_G.HealthBarEspCache) do
+        pcall(function() item:Remove() end)
+    end
+end
+_G.HealthBarEspCache = {}
 
 local function NewLine(thickness, color)
     local line = Drawing.new("Line")
@@ -10,6 +18,7 @@ local function NewLine(thickness, color)
     line.Color = color 
     line.Thickness = thickness
     line.Transparency = 1
+    table.insert(_G.HealthBarEspCache, line)
     return line
 end
 
@@ -29,13 +38,18 @@ local function HealthBarESP(plr)
     local function Updater()
         local connection
         connection = game:GetService("RunService").RenderStepped:Connect(function()
+            if not plr or not plr.Parent then
+                Visibility(false, library)
+                connection:Disconnect()
+                return
+            end
+
             if plr.Character ~= nil and plr.Character:FindFirstChild("Humanoid") ~= nil and plr.Character:FindFirstChild("HumanoidRootPart") ~= nil and plr.Character.Humanoid.Health > 0 and plr.Character:FindFirstChild("Head") ~= nil then
                 local HumPos, OnScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
                 if OnScreen then
                     local head = camera:WorldToViewportPoint(plr.Character.Head.Position)
                     local DistanceY = math.clamp((Vector2.new(head.X, head.Y) - Vector2.new(HumPos.X, HumPos.Y)).magnitude, 2, math.huge)
                     
-                    -- 박스 기준 왼쪽 위치 계산 (체력바가 위치할 곳)
                     local BoxLeftX = HumPos.X - DistanceY - 6
                     local d = (Vector2.new(HumPos.X - DistanceY, HumPos.Y - DistanceY*2) - Vector2.new(HumPos.X - DistanceY, HumPos.Y + DistanceY*2)).magnitude 
                     local healthoffset = plr.Character.Humanoid.Health / plr.Character.Humanoid.MaxHealth * d
