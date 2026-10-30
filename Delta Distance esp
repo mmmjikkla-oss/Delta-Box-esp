@@ -1,4 +1,4 @@
--- Tracer Line ESP Only
+-- Tracer Line ESP Only (Clean & Toggleable)
 local Settings = {
     Tracer_Color = Color3.fromRGB(255, 0, 0),
     Tracer_Thickness = 1,
@@ -11,6 +11,14 @@ local player = game:GetService("Players").LocalPlayer
 local camera = game:GetService("Workspace").CurrentCamera
 local mouse = player:GetMouse()
 
+-- 기존에 남아있던 잔해 청소
+if _G.TracerEspCache then
+    for _, item in pairs(_G.TracerEspCache) do
+        pcall(function() item:Remove() end)
+    end
+end
+_G.TracerEspCache = {}
+
 local function NewLine(thickness, color)
     local line = Drawing.new("Line")
     line.Visible = false
@@ -19,6 +27,7 @@ local function NewLine(thickness, color)
     line.Color = color 
     line.Thickness = thickness
     line.Transparency = 1
+    table.insert(_G.TracerEspCache, line)
     return line
 end
 
@@ -38,13 +47,18 @@ local function TracerESP(plr)
     local function Updater()
         local connection
         connection = game:GetService("RunService").RenderStepped:Connect(function()
+            if not plr or not plr.Parent then
+                Visibility(false, library)
+                connection:Disconnect()
+                return
+            end
+
             if plr.Character ~= nil and plr.Character:FindFirstChild("Humanoid") ~= nil and plr.Character:FindFirstChild("HumanoidRootPart") ~= nil and plr.Character.Humanoid.Health > 0 and plr.Character:FindFirstChild("Head") ~= nil then
                 local HumPos, OnScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
                 if OnScreen then
                     local head = camera:WorldToViewportPoint(plr.Character.Head.Position)
                     local DistanceY = math.clamp((Vector2.new(head.X, head.Y) - Vector2.new(HumPos.X, HumPos.Y)).magnitude, 2, math.huge)
 
-                    -- 트레이서 선 렌더링
                     if Settings.Tracer_Origin == "Middle" then
                         library.tracer.From = camera.ViewportSize * 0.5
                         library.blacktracer.From = camera.ViewportSize * 0.5
