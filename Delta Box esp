@@ -1,14 +1,16 @@
--- Box ESP Only (Clean & Toggleable)
+-- Box ESP Only (Player-separated & Toggleable)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
 local Settings = {
     Box_Color = Color3.fromRGB(255, 0, 0),
     Box_Thickness = 1
 }
 local TeamColor = true
 
-local player = game:GetService("Players").LocalPlayer
-local camera = game:GetService("Workspace").CurrentCamera
-
--- 기존에 남아있던 잔해 청소
+-- 기존에 남아있던 잔해 전체 청소
 if _G.BoxEspCache then
     for _, item in pairs(_G.BoxEspCache) do
         pcall(function() item:Remove() end)
@@ -31,73 +33,76 @@ local function NewQuad(thickness, color)
     return quad
 end
 
-local function Visibility(state, lib)
-    for u, x in pairs(lib) do
-        x.Visible = state
-    end
-end
+local objects = {}
 
-local function Colorize(library, color)
-    library.box.Color = color
-end
-
-local black = Color3.fromRGB(0, 0, 0)
-local function BoxESP(plr)
+local function create(player)
     local library = {
-        black = NewQuad(Settings.Box_Thickness * 2, black),
+        black = NewQuad(Settings.Box_Thickness * 2, Color3.fromRGB(0, 0, 0)),
         box = NewQuad(Settings.Box_Thickness, Settings.Box_Color)
     }
-
-    local function Updater()
-        local connection
-        connection = game:GetService("RunService").RenderStepped:Connect(function()
-            if not plr or not plr.Parent then
-                Visibility(false, library)
-                connection:Disconnect()
-                return
-            end
-
-            if plr.Character ~= nil and plr.Character:FindFirstChild("Humanoid") ~= nil and plr.Character:FindFirstChild("HumanoidRootPart") ~= nil and plr.Character.Humanoid.Health > 0 and plr.Character:FindFirstChild("Head") ~= nil then
-                local HumPos, OnScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
-                if OnScreen then
-                    local head = camera:WorldToViewportPoint(plr.Character.Head.Position)
-                    local DistanceY = math.clamp((Vector2.new(head.X, head.Y) - Vector2.new(HumPos.X, HumPos.Y)).magnitude, 2, math.huge)
-                    
-                    local function Size(item)
-                        item.PointA = Vector2.new(HumPos.X + DistanceY, HumPos.Y - DistanceY * 2)
-                        item.PointB = Vector2.new(HumPos.X - DistanceY, HumPos.Y - DistanceY * 2)
-                        item.PointC = Vector2.new(HumPos.X - DistanceY, HumPos.Y + DistanceY * 2)
-                        item.PointD = Vector2.new(HumPos.X + DistanceY, HumPos.Y + DistanceY * 2)
-                    end
-                    Size(library.box)
-                    Size(library.black)
-
-                    if TeamColor == true then
-                        Colorize(library, plr.TeamColor.Color)
-                    end
-                    Visibility(true, library)
-                else 
-                    Visibility(false, library)
-                end
-            else 
-                Visibility(false, library)
-                if game.Players:FindFirstChild(plr.Name) == nil then
-                    connection:Disconnect()
-                end
-            end
-        end)
-    end
-    coroutine.wrap(Updater)()
+    objects[player] = library
+    return library
 end
 
-for i, v in pairs(game:GetService("Players"):GetPlayers()) do
-    if v.Name ~= player.Name then
-        coroutine.wrap(BoxESP)(v)
+Players.PlayerRemoving:Connect(function(player)
+    if objects[player] then
+        for _, obj in pairs(objects[player]) do
+            pcall(function() obj:Remove() end)
+        end
+        objects[player] = nil
+    end
+end)
+
+for _, player in Players:GetPlayers() do
+    if player ~= LocalPlayer then
+        create(player)
     end
 end
 
-game.Players.PlayerAdded:Connect(function(newplr)
-    if newplr.Name ~= player.Name then
-        coroutine.wrap(BoxESP)(newplr)
+Players.PlayerAdded:Connect(function(player)
+    if player ~= LocalPlayer then
+        create(player)
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    for player, library in pairs(objects) do
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        local head = character and character:FindFirstChild("Head")
+
+        if character and root and humanoid and humanoid.Health > 0 and head then
+            local HumPos, OnScreen = Camera:WorldToViewportPoint(root.Position)
+            if OnScreen then
+                local headPos = Camera:WorldToViewportPoint(head.Position)
+                local DistanceY = math.clamp((Vector2.new(headPos.X, headPos.Y) - Vector2.new(HumPos.X, HumPos.Y)).magnitude, 2, math.huge)
+                
+                local function Size(item)
+                    item.PointA = Vector2.new(HumPos.X + DistanceY, HumPos.Y - DistanceY * 2)
+                    item.PointB = Vector2.new(HumPos.X - DistanceY, HumPos.Y - DistanceY * 2)
+                    item.PointC = Vector2.new(HumPos.X - DistanceY, HumPos.Y + DistanceY * 2)
+                    item.PointD = Vector2.new(HumPos.X + DistanceY, HumPos.Y + DistanceY * 2)
+                end
+                
+                Size(library.box)
+                Size(library.black)
+
+                if TeamColor and player.TeamColor then
+                    library.box.Color = player.TeamColor.Color
+                else
+                    library.box.Color = Settings.Box_Color
+                end
+
+                library.box.Visible = true
+                library.black.Visible = true
+            else
+                library.box.Visible = false
+                library.black.Visible = false
+            end
+        else
+            library.box.Visible = false
+            library.black.Visible = false
+        end
     end
 end)
