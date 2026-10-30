@@ -1,4 +1,4 @@
--- Box ESP Only
+-- Box ESP Only (Clean & Toggleable)
 local Settings = {
     Box_Color = Color3.fromRGB(255, 0, 0),
     Box_Thickness = 1
@@ -7,6 +7,14 @@ local TeamColor = true
 
 local player = game:GetService("Players").LocalPlayer
 local camera = game:GetService("Workspace").CurrentCamera
+
+--// [핵심] 기존에 실행되었던 ESP 객체들이 있다면 완벽하게 청소(지우기)
+if _G.BoxEspCache then
+    for _, item in pairs(_G.BoxEspCache) do
+        pcall(function() item:Remove() end)
+    end
+end
+_G.BoxEspCache = {}
 
 local function NewQuad(thickness, color)
     local quad = Drawing.new("Quad")
@@ -19,6 +27,7 @@ local function NewQuad(thickness, color)
     quad.Filled = false
     quad.Thickness = thickness
     quad.Transparency = 1
+    table.insert(_G.BoxEspCache, quad) -- 캐시에 담아두어 나중에 끄면 지울 수 있게 함
     return quad
 end
 
@@ -42,6 +51,13 @@ local function BoxESP(plr)
     local function Updater()
         local connection
         connection = game:GetService("RunService").RenderStepped:Connect(function()
+            -- 플레이어나 캐릭터가 사라지면 루프 중지
+            if not plr or not plr.Parent then
+                Visibility(false, library)
+                connection:Disconnect()
+                return
+            end
+
             if plr.Character ~= nil and plr.Character:FindFirstChild("Humanoid") ~= nil and plr.Character:FindFirstChild("HumanoidRootPart") ~= nil and plr.Character.Humanoid.Health > 0 and plr.Character:FindFirstChild("Head") ~= nil then
                 local HumPos, OnScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
                 if OnScreen then
