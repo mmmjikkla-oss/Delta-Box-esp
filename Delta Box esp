@@ -1,240 +1,56 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local GuiService = game:GetService("GuiService")
-
---====================================================--
--- CONFIG                                              --
---====================================================--
-local CONFIG = {
-	BOX_COLOR_A    = Color3.new(1, 1, 1), -- gradient top-left color
-	BOX_COLOR_B    = Color3.new(1, 1, 1), -- gradient bottom-right color
-	BOX_ALPHA      = 0,       -- box transparency (0 = solid, 1 = invisible)
-	BOX_ROTATION   = 0,       -- gradient rotation (degrees)
-	OUTLINE_COLOR  = Color3.new(),
-	SHOW_TEAMMATES = false,   -- show same-team players
-	DEAD_CHECK     = true,    -- auto-hide dead players
-	MAX_DISTANCE   = 0,       -- max draw distance in studs (0 = infinite)
-}
-
---====================================================--
--- [verbatim from the original ESP code]               --
---====================================================--
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local gui_inset = GuiService:GetGuiInset()
 
-local _WorldToViewportPoint = Camera.WorldToViewportPoint
-local _Vector2new, _Vector3new = Vector2.new, Vector3.new
-
-local VERTICES = {
-	_Vector3new(-1, -1, -1),
-	_Vector3new(-1, 1, -1),
-	_Vector3new(-1, 1, 1),
-	_Vector3new(-1, -1, 1),
-	_Vector3new(1, -1, -1),
-	_Vector3new(1, 1, -1),
-	_Vector3new(1, 1, 1),
-	_Vector3new(1, -1, 1)
-}
-
-local function isBodyPart(name)
-	return name == "Head" or name:find("Torso") or name:find("Leg") or name:find("Arm") or name:find("Hand") or name:find("Foot")
-end
-
-local function getBoundingBox(parts)
-	local min, max
-	for i, part in parts do
-		local cframe, size = part[1], part[2]
-		min = Vector3.zero.Min(min or cframe.Position, (cframe - size * 0.5).Position)
-		max = Vector3.zero.Max(max or cframe.Position, (cframe + size * 0.5).Position)
-	end
-	local center = (min + max) * 0.5
-	local front = _Vector3new(center.X, center.Y, max.Z)
-	return CFrame.new(center, front), max - min
-end
-
-local function worldToScreen(world)
-	local screen, inBounds = _WorldToViewportPoint(Camera, world)
-	return _Vector2new(screen.X, screen.Y), inBounds, screen.Z
-end
-
-local function calculateCorners(cframe, size)
-	local corners = table.create(#VERTICES)
-	for i, vertice in VERTICES do
-		corners[i] = worldToScreen((cframe + size * 0.5 * vertice).Position)
-	end
-	local min = Vector2.zero.Min(Camera.ViewportSize, unpack(corners))
-	local max = Vector2.zero.Max(Vector2.zero, unpack(corners))
-	return {
-		corners = corners,
-		topLeft = _Vector2new(min.X, min.Y),
-		topRight = _Vector2new(max.X, min.Y),
-		bottomLeft = _Vector2new(min.X, max.Y),
-		bottomRight = _Vector2new(max.X, max.Y)
-	}
-end
-
-local function get_cache(character)
-	local cache = {}
-	local count = 0
-	for _, part in character:GetChildren() do
-		if part:IsA("BasePart") and isBodyPart(part.Name) then
-			cache[part.Name] = {part.CFrame, part.Size}
-			count += 1
-		end
-	end
-	return count, cache
-end
-
-local function get_root(character)
-	return character and character:FindFirstChild("HumanoidRootPart")
-end
-
-local function get_humanoid(character)
-	return character and character:FindFirstChildOfClass("Humanoid")
-end
-
-local function get_team_same(player)
-	return LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team
-end
--- [end verbatim]
-
---====================================================--
--- storage                                             --
---====================================================--
-local storage = game:GetService("CoreGui")
-if not storage then storage = LocalPlayer:WaitForChild("PlayerGui") end
-
-local FOLDER_NAME = "ESP_BOX"
+-- 기존 스토리지 문제 해결을 위해 PlayerGui 사용
+local storage = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui")
+local FOLDER_NAME = "ESP_BOX_TEST"
 if storage:FindFirstChild(FOLDER_NAME) then storage:FindFirstChild(FOLDER_NAME):Destroy() end
 local folder = Instance.new("Folder")
 folder.Name = FOLDER_NAME
 folder.Parent = storage
 
---====================================================--
--- per-player box objects (original structure)         --
---====================================================--
 local objects = {}
 
 local function create(player)
-	local holder = Instance.new("Frame")
-	holder.ZIndex = 2
-	holder.BorderSizePixel = 0
-	holder.Size = UDim2.fromScale(0, 0)
-	holder.Position = UDim2.fromScale(0, 0)
-	holder.BackgroundTransparency = 1
-	holder.Visible = false
-	holder.Parent = folder
-
-	local box_holder = Instance.new("Frame")
-	box_holder.ZIndex = -1
-	box_holder.BorderSizePixel = 0
-	box_holder.Size = UDim2.new(1, -2, 1, -2)
-	box_holder.Position = UDim2.new(0, 1, 0, 1)
-	box_holder.BackgroundTransparency = 1
-	box_holder.Parent = holder
-
-	local box_outline_holder = Instance.new("Frame")
-	box_outline_holder.ZIndex = -1
-	box_outline_holder.BorderSizePixel = 0
-	box_outline_holder.BackgroundColor3 = Color3.new(1, 1, 1)
-	box_outline_holder.Size = UDim2.new(1, -4, 1, -4)
-	box_outline_holder.Position = UDim2.new(0, 2, 0, 2)
-	box_outline_holder.BackgroundTransparency = 1
-	box_outline_holder.Parent = holder
-
-	local main_box = Instance.new("UIStroke")
-	main_box.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	main_box.LineJoinMode = Enum.LineJoinMode.Miter
-	main_box.Color = Color3.new(1, 1, 1)
-	main_box.Parent = box_holder
-
-	local main_box_color = Instance.new("UIGradient")
-	main_box_color.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, CONFIG.BOX_COLOR_A),
-		ColorSequenceKeypoint.new(1, CONFIG.BOX_COLOR_B)
-	})
-	main_box_color.Rotation = CONFIG.BOX_ROTATION
-	main_box_color.Parent = main_box
-
-	local main_box_outline_1 = Instance.new("UIStroke")
-	main_box_outline_1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	main_box_outline_1.LineJoinMode = Enum.LineJoinMode.Miter
-	main_box_outline_1.Color = CONFIG.OUTLINE_COLOR
-	main_box_outline_1.Parent = holder
-
-	local main_box_outline_2 = Instance.new("UIStroke")
-	main_box_outline_2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	main_box_outline_2.LineJoinMode = Enum.LineJoinMode.Miter
-	main_box_outline_2.Color = CONFIG.OUTLINE_COLOR
-	main_box_outline_2.Parent = box_outline_holder
-
-	main_box.Transparency = CONFIG.BOX_ALPHA
-	main_box_outline_1.Transparency = CONFIG.BOX_ALPHA
-	main_box_outline_2.Transparency = CONFIG.BOX_ALPHA
-
-	objects[player] = { holder = holder }
-	return objects[player]
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(0, 100, 0, 150) -- 고정 크기 테스트
+    holder.Position = UDim2.new(0.5, 0, 0.5, 0) -- 화면 정중앙 테스트
+    holder.BackgroundTransparency = 0.5
+    holder.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- 빨간색 박스로 강제 표시
+    holder.Parent = folder
+    objects[player] = { holder = holder }
+    return objects[player]
 end
 
-local function destroy(player)
-	local data = objects[player]
-	if not data then return end
-	data.holder:Destroy()
-	objects[player] = nil
-end
-
-Players.PlayerRemoving:Connect(destroy)
-
---====================================================--
--- render loop                                         --
---====================================================--
-RunService.RenderStepped:Connect(function(delta)
-	if delta > 0.08 then return end
-	for _, player in Players:GetPlayers() do
-		if player == LocalPlayer then continue end
-		if (not CONFIG.SHOW_TEAMMATES) and get_team_same(player) then
-			if objects[player] then objects[player].holder.Visible = false end
-			continue
-		end
-
-		local data = objects[player] or create(player)
-		local character = player.Character
-		local root = get_root(character)
-		local humanoid = get_humanoid(character)
-
-		local humanoid_health = humanoid and humanoid.Health
-		local humanoid_max_health = humanoid and humanoid.MaxHealth
-		local humanoid_distance = root and (Camera.CFrame.Position - root.Position).Magnitude
-
-		if not root
-			or (CONFIG.DEAD_CHECK and humanoid_health and humanoid_health <= 0)
-			or (CONFIG.MAX_DISTANCE > 0 and humanoid_distance > CONFIG.MAX_DISTANCE) then
-			data.holder.Visible = false
-			continue
-		end
-
-		local _, onScreen = _WorldToViewportPoint(Camera, root.Position)
-		if not onScreen then
-			data.holder.Visible = false
-			continue
-		end
-
-		local count, cache = get_cache(character)
-		if count <= 0 then
-			data.holder.Visible = false
-			continue
-		end
-
-		local corners = calculateCorners(getBoundingBox(cache))
-
-		local pos = corners.topLeft
-		local size = corners.bottomRight - corners.topLeft
-		data.holder.Position = UDim2.fromOffset(pos.X - gui_inset.X, pos.Y - gui_inset.Y)
-		data.holder.Size = UDim2.fromOffset(size.X, size.Y)
-
-		data.holder.Visible = true
-	end
+Players.PlayerRemoving:Connect(function(player)
+    if objects[player] then
+        objects[player].holder:Destroy()
+        objects[player] = nil
+    end
 end)
 
-print("[ESP] box loaded")
+-- 강제 렌더링 루프 테스트
+RunService.RenderStepped:Connect(function()
+    for _, player in Players:GetPlayers() do
+        if player == LocalPlayer then continue end
+        local data = objects[player] or create(player)
+        
+        local character = player.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local root = character.HumanoidRootPart
+            local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+            if onScreen then
+                data.holder.Visible = true
+                data.holder.Position = UDim2.new(0, screenPos.X - 50, 0, screenPos.Y - 75)
+            else
+                data.holder.Visible = false
+            end
+        else
+            data.holder.Visible = false
+        end
+    end
+end)
+
+print("[ESP] Test box loaded successfully")
