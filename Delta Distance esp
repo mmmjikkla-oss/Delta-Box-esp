@@ -1,0 +1,94 @@
+-- Tracer Line ESP Only
+local Settings = {
+    Tracer_Color = Color3.fromRGB(255, 0, 0),
+    Tracer_Thickness = 1,
+    Tracer_Origin = "Bottom", -- "Middle" 또는 "Bottom"
+    Tracer_FollowMouse = false
+}
+local TeamColor = true
+
+local player = game:GetService("Players").LocalPlayer
+local camera = game:GetService("Workspace").CurrentCamera
+local mouse = player:GetMouse()
+
+local function NewLine(thickness, color)
+    local line = Drawing.new("Line")
+    line.Visible = false
+    line.From = Vector2.new(0, 0)
+    line.To = Vector2.new(0, 0)
+    line.Color = color 
+    line.Thickness = thickness
+    line.Transparency = 1
+    return line
+end
+
+local function Visibility(state, lib)
+    for u, x in pairs(lib) do
+        x.Visible = state
+    end
+end
+
+local black = Color3.fromRGB(0, 0, 0)
+local function TracerESP(plr)
+    local library = {
+        blacktracer = NewLine(Settings.Tracer_Thickness * 2, black),
+        tracer = NewLine(Settings.Tracer_Thickness, Settings.Tracer_Color)
+    }
+
+    local function Updater()
+        local connection
+        connection = game:GetService("RunService").RenderStepped:Connect(function()
+            if plr.Character ~= nil and plr.Character:FindFirstChild("Humanoid") ~= nil and plr.Character:FindFirstChild("HumanoidRootPart") ~= nil and plr.Character.Humanoid.Health > 0 and plr.Character:FindFirstChild("Head") ~= nil then
+                local HumPos, OnScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
+                if OnScreen then
+                    local head = camera:WorldToViewportPoint(plr.Character.Head.Position)
+                    local DistanceY = math.clamp((Vector2.new(head.X, head.Y) - Vector2.new(HumPos.X, HumPos.Y)).magnitude, 2, math.huge)
+
+                    -- 트레이서 선 렌더링
+                    if Settings.Tracer_Origin == "Middle" then
+                        library.tracer.From = camera.ViewportSize * 0.5
+                        library.blacktracer.From = camera.ViewportSize * 0.5
+                    elseif Settings.Tracer_Origin == "Bottom" then
+                        library.tracer.From = Vector2.new(camera.ViewportSize.X * 0.5, camera.ViewportSize.Y) 
+                        library.blacktracer.From = Vector2.new(camera.ViewportSize.X * 0.5, camera.ViewportSize.Y)
+                    end
+                    if Settings.Tracer_FollowMouse then
+                        library.tracer.From = Vector2.new(mouse.X, mouse.Y + 36)
+                        library.blacktracer.From = Vector2.new(mouse.X, mouse.Y + 36)
+                    end
+                    
+                    library.tracer.To = Vector2.new(HumPos.X, HumPos.Y + DistanceY * 2)
+                    library.blacktracer.To = Vector2.new(HumPos.X, HumPos.Y + DistanceY * 2)
+
+                    if TeamColor == true then
+                        library.tracer.Color = plr.TeamColor.Color
+                    else
+                        library.tracer.Color = Settings.Tracer_Color
+                    end
+                    
+                    Visibility(true, library)
+                else 
+                    Visibility(false, library)
+                end
+            else 
+                Visibility(false, library)
+                if game.Players:FindFirstChild(plr.Name) == nil then
+                    connection:Disconnect()
+                end
+            end
+        end)
+    end
+    coroutine.wrap(Updater)()
+end
+
+for i, v in pairs(game:GetService("Players"):GetPlayers()) do
+    if v.Name ~= player.Name then
+        coroutine.wrap(TracerESP)(v)
+    end
+end
+
+game.Players.PlayerAdded:Connect(function(newplr)
+    if newplr.Name ~= player.Name then
+        coroutine.wrap(TracerESP)(newplr)
+    end
+end)
