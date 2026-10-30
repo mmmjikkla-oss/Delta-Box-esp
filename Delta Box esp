@@ -8,7 +8,7 @@ local TeamColor = true
 local player = game:GetService("Players").LocalPlayer
 local camera = game:GetService("Workspace").CurrentCamera
 
---// [핵심] 기존에 실행되었던 ESP 객체들이 있다면 완벽하게 청소(지우기)
+-- 기존에 남아있던 잔해 청소
 if _G.BoxEspCache then
     for _, item in pairs(_G.BoxEspCache) do
         pcall(function() item:Remove() end)
@@ -27,7 +27,7 @@ local function NewQuad(thickness, color)
     quad.Filled = false
     quad.Thickness = thickness
     quad.Transparency = 1
-    table.insert(_G.BoxEspCache, quad) -- 캐시에 담아두어 나중에 끄면 지울 수 있게 함
+    table.insert(_G.BoxEspCache, quad)
     return quad
 end
 
@@ -51,7 +51,6 @@ local function BoxESP(plr)
     local function Updater()
         local connection
         connection = game:GetService("RunService").RenderStepped:Connect(function()
-            -- 플레이어나 캐릭터가 사라지면 루프 중지
             if not plr or not plr.Parent then
                 Visibility(false, library)
                 connection:Disconnect()
